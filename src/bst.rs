@@ -34,8 +34,7 @@ impl<T: Display + PartialOrd> Tree<T>{
         println!();
     }
 
-    fn inner_print(node: &Option<Box<TreeNode<T>>>) {
-        match node {
+    fn inner_print(node: &Option<Box<TreeNode<T>>>) { match node {
             None => return,
             Some(n) => {
                 Self::inner_print(&n.left);
