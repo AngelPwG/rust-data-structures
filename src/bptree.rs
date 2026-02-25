@@ -80,20 +80,27 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
                     let mut node = node.borrow_mut();
                     node.keys.push(key);
                     if let NodeType::Leaf{data, ..} = &mut node.node_type {
-                        data.push(value);
+                        data.push(value)
                     }
                     return true;
                 }
+                true
             },
-            Some(node) => {
-                let mut node = node.borrow_mut();
-                if node.keys.len() == (((2 * node.t) - 1) as usize) {
+            Some(root) => {
+                if root.borrow().is_full() {
                     let mut new_root = Node::<T>::new_node(INTERNAL_T, false);
+                    if let NodeType::Internal {children} = &mut new_root.borrow_mut().node_type {
+                        children.insert(0, Rc::clone(&root));
+                    }
+                    new_root.borrow_mut().split_child(0);
+                    self.root = Some(Rc::clone(&new_root));
+                    return Self::insert_non_full(&mut new_root, key, value)
                 }
+                Self::insert_non_full(root, key, value)
             }
         }
-        true
     }
+    fn insert_non_full(node: &mut NodeRef<T>, key: u64, value: T) -> bool{ true }
 }
 
 
