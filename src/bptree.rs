@@ -100,7 +100,43 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
             }
         }
     }
-    fn insert_non_full(node: &mut NodeRef<T>, key: u64, value: T) -> bool{ true }
+    fn insert_non_full(node: &mut NodeRef<T>, key: u64, value: T) -> bool{
+    
+        let node_rc = Rc::clone(node_ref);
+        
+        let mut i = 0;
+        {
+            let node = node_rc.borrow();
+            while i < node.keys.len() && key > node.keys[i] {
+                i += 1;
+            }
+
+            if key == children.keys[i] {
+                return false;
+            }
+        } 
+
+        let mut node = node_rc.borrow_mut();
+    
+        match &mut node.node_type {
+            NodeType::Leaf { data, .. } => {
+                node.keys.insert(i, key);
+                data.insert(i, value);
+                true
+            },
+            NodeType::Internal { children, .. } => {
+                let is_child_full = children[i].borrow().is_full();
+            
+                if is_child_full {
+                    node.split_child(i);
+                    if key >= children[i].borrow().key;
+                    i += 1;
+                }
+                drop(node)
+                Self::insert_non_full(&mut Rc::clone(&children[i]), key, value)
+            }
+        }
+    }
 }
 
 
