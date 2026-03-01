@@ -6,15 +6,15 @@ const LEAF_T: u8 = 37;
 const INTERNAL_T: u8 = 60;
 type NodeRef<T> = Rc<RefCell<Node<T>>>;
 
-struct BPlusTree<T: Display + PartialOrd>{
+pub struct BPlusTree<T: Display + PartialOrd>{
     root: Option<NodeRef<T>>
 }
-struct Node<T: Display + PartialOrd>{
+pub struct Node<T: Display + PartialOrd>{
     keys: Vec<u64>,
     t: u8,
-    node_type: NodeType<T>
+    pub node_type: NodeType<T>,
 }
-enum NodeType<T: Display + PartialOrd>{
+pub enum NodeType<T: Display + PartialOrd>{
     Internal{children: Vec<NodeRef<T>>},
     Leaf{data: Vec<T>, next_leaf: Option<NodeRef<T>>}
 }
@@ -32,10 +32,10 @@ impl<T: Display + PartialOrd> Node<T>{
             node_type
         }))
     }
-    pub fn is_full(&self) -> bool { 
+    fn is_full(&self) -> bool { 
         self.keys.len() >= (self.t * 2 - 1) as usize
     }
-    pub fn split_child(&mut self, children_index: usize){
+    fn split_child(&mut self, children_index: usize){
         if let NodeType::Internal {children, ..} = &mut self.node_type {
             let second_node;
             {
@@ -72,6 +72,9 @@ impl<T: Display + PartialOrd> Node<T>{
     }
 }
 impl<T: Display + PartialOrd> BPlusTree<T>{
+    pub fn new() -> Self{
+        BPlusTree { root: None}
+    }
     pub fn insert(&mut self, key: u64, value: T) -> bool{
         match &mut self.root{
             None => {
@@ -141,6 +144,37 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
                 let mut next_child = Rc::clone(&children[i]);
                 drop(node_lock);
                 Self::insert_non_full(&mut next_child, key, value)
+            }
+        }
+    }
+    pub fn search(&self, key: u64) -> Option<(NodeRef<T>, usize)>{
+        match &self.root{
+            None => None,
+            Some(node) => Self::search_in(Rc::clone(node), key),
+        }
+    }
+    fn search_in(node: NodeRef<T>, key: u64) -> Option<(NodeRef<T>, usize)>{
+        let mut i = 0;
+        
+        let lock_n = node.borrow();
+        match &lock_n.node_type{
+            NodeType::Leaf {data, ..} => {
+                while i < lock_n.keys.len() && key > lock_n.keys[i]{
+                    i += 1;
+                }
+                if i < lock_n.keys.len() && lock_n.keys[i] == key{
+                    drop(lock_n);
+                    return Some((Rc::clone(&node), i));
+                }
+                None
+            }
+            NodeType::Internal {children} => {
+                while i < lock_n.keys.len() && key >= lock_n.keys[i]{
+                    i += 1;
+                }   
+                let next_child = Rc::clone(&children[i]);
+                drop(lock_n);
+                Self::search_in(next_child, key)
             }
         }
     }
