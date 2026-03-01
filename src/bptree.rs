@@ -102,7 +102,7 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
     }
     fn insert_non_full(node: &mut NodeRef<T>, key: u64, value: T) -> bool{
     
-        let node_rc = Rc::clone(node_ref);
+        let node_rc: NodeRef<T> = Rc::clone(node);
         
         let mut i = 0;
         {
@@ -111,29 +111,36 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
                 i += 1;
             }
 
-            if key == children.keys[i] {
+            if i < node.keys.len() && key == node.keys[i] {
                 return false;
             }
-        } 
+        }
 
-        let mut node = node_rc.borrow_mut();
-    
+        let mut node_lock = node_rc.borrow_mut();
+        let node = &mut *node_lock;    
+
+        let mut is_children_full = false;
+        if let NodeType::Internal{children} = &mut node.node_type {
+            is_children_full = children[i].borrow().is_full();
+        }
+
+        if is_children_full{
+            node.split_child(i);
+            if key > node.keys[i]{
+                i += 1;
+            }
+        }
+        
         match &mut node.node_type {
             NodeType::Leaf { data, .. } => {
                 node.keys.insert(i, key);
                 data.insert(i, value);
                 true
             },
-            NodeType::Internal { children, .. } => {
-                let is_child_full = children[i].borrow().is_full();
-            
-                if is_child_full {
-                    node.split_child(i);
-                    if key >= children[i].borrow().key;
-                    i += 1;
-                }
-                drop(node)
-                Self::insert_non_full(&mut Rc::clone(&children[i]), key, value)
+            NodeType::Internal { children } => {
+                let mut next_child = Rc::clone(&children[i]);
+                drop(node_lock);
+                Self::insert_non_full(&mut next_child, key, value)
             }
         }
     }
