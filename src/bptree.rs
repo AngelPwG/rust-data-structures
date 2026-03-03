@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
 
-const LEAF_T: u8 = 37;
-const INTERNAL_T: u8 = 60;
+const LEAF_T: u8 = 3;
+const INTERNAL_T: u8 = 4;
 type NodeRef<T> = Rc<RefCell<Node<T>>>;
 
 pub struct BPlusTree<T: Display + PartialOrd>{
@@ -177,6 +177,50 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
                 Self::search_in(next_child, key)
             }
         }
+    }
+    pub fn printRecursive(&self) {
+        match &self.root {
+            Some(node) => Self::printRecursively(&Rc::clone(node), 0),
+            None => println!("No records."),
+        }
+    }
+    fn printRecursively(node: &NodeRef<T>, level: usize){
+        print!("{} Level {level}", " ".repeat(level));
+        println!("{:?}", node.borrow().keys);
+        match &node.borrow().node_type {
+            NodeType::Internal{children} => {
+                for child in children {
+                    Self::printRecursively(&Rc::clone(child), level + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn borrowOrMerge(node: &NodeRef<T>, index: usize){
+        if let NodeType::Internal{children} = &mut node.borrow_mut().node_type {
+            let mut hasLeft = true;
+            let mut hasRight = true;
+            if index == children.len() - 1 {
+                hasRight = false;
+            }
+            if index == 0{
+                hasLeft = false;
+            }
+            if hasLeft && (children[index - 1].borrow().keys.len() > (node.borrow().t - 1) as usize) {
+                
+            } else if hasRight && (children[index + 1].borrow().keys.len() > (node.borrow().t - 1) as usize) {
+
+            } else if hasLeft {
+
+            } else {
+
+            }
+        }
+    }
+    fn borrowFromLeft(padre: &mut NodeRef<T>, hijo: &mut NodeRef<T>, izq: &mut NodeRef<T>, index: usize){
+        hijo.borrow_mut().keys.add(0, izq.borrow_mut().keys.remove(0));
+        match &mut hijo.borrow_mut()
+
     }
 }
 
