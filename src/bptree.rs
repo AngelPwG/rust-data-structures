@@ -185,7 +185,7 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
         }
     }
     fn printRecursively(node: &NodeRef<T>, level: usize){
-        print!("{} Level {level}", " ".repeat(level));
+        print!("{} Level {level}", " ".repeat(level * 4));
         println!("{:?}", node.borrow().keys);
         match &node.borrow().node_type {
             NodeType::Internal{children} => {
@@ -207,7 +207,7 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
                 hasLeft = false;
             }
             if hasLeft && (children[index - 1].borrow().keys.len() > (node.borrow().t - 1) as usize) {
-                
+                borrowFromLeft(&Rc::clone(node), &Rc::clone(children[index]), &Rc::clone(children[index - 1]), index);
             } else if hasRight && (children[index + 1].borrow().keys.len() > (node.borrow().t - 1) as usize) {
 
             } else if hasLeft {
@@ -218,9 +218,26 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
         }
     }
     fn borrowFromLeft(padre: &mut NodeRef<T>, hijo: &mut NodeRef<T>, izq: &mut NodeRef<T>, index: usize){
-        hijo.borrow_mut().keys.add(0, izq.borrow_mut().keys.remove(0));
-        match &mut hijo.borrow_mut()
-
+        let lenIzq = izq.borrow().keys.len();
+        let mut hijo_ref = & *hijo.borrow_mut();
+        hijo_ref.keys.add(0, izq.borrow_mut().keys.remove(lenIzq - 1);
+        match &mut hijo_ref.node_type {
+            NodeType::Internal{children} => {
+                hijo_ref.keys.add(0, padre.borrow().keys[index - 1]);
+                padre.borrow_mut().keys[index - 1] = izq.borrow_mut().keys.remove(lenIzq - 1);
+                if let NodeType::Internal{childrenIzq} = &mut izq.borrow_mut().node_type{
+                    children.add(0, childrenIzq.remove(lenIzq));
+                }
+                
+            }
+            NodeType::Leaf{data, ..} => {
+                hijo_ref.keys.add(0, izq.borrow_mut().keys.remove(lenIzq - 1);
+                if let NodeType::Leaf{dataIzq, ..} = &mut izq.borrow_mut().node_type {
+                    data.add(0, dataIzq.remove(lenIzq - 1));
+                }
+                padre.borrow_mut().keys[index - 1] = hijo_ref.keys[0];
+            }
+        }
     }
 }
 
