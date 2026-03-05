@@ -178,67 +178,106 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
             }
         }
     }
-    pub fn printRecursive(&self) {
+    pub fn print_recursive(&self) {
         match &self.root {
-            Some(node) => Self::printRecursively(&Rc::clone(node), 0),
+            Some(node) => Self::print_recursively(&Rc::clone(node), 0),
             None => println!("No records."),
         }
     }
-    fn printRecursively(node: &NodeRef<T>, level: usize){
+    fn print_recursively(node: &NodeRef<T>, level: usize){
         print!("{} Level {level}", " ".repeat(level * 4));
         println!("{:?}", node.borrow().keys);
         match &node.borrow().node_type {
             NodeType::Internal{children} => {
                 for child in children {
-                    Self::printRecursively(&Rc::clone(child), level + 1);
+                    Self::print_recursively(&Rc::clone(child), level + 1);
                 }
             }
             _ => {}
         }
     }
-    fn borrowOrMerge(node: &NodeRef<T>, index: usize){
+    fn borrow_or_merge(node: &NodeRef<T>, index: usize){
+        let t = node.borrow().t;
         if let NodeType::Internal{children} = &mut node.borrow_mut().node_type {
-            let mut hasLeft = true;
-            let mut hasRight = true;
-            if index == children.len() - 1 {
-                hasRight = false;
-            }
-            if index == 0{
-                hasLeft = false;
-            }
-            if hasLeft && (children[index - 1].borrow().keys.len() > (node.borrow().t - 1) as usize) {
-                borrowFromLeft(&Rc::clone(node), &Rc::clone(children[index]), &Rc::clone(children[index - 1]), index);
-            } else if hasRight && (children[index + 1].borrow().keys.len() > (node.borrow().t - 1) as usize) {
+            let has_left = index > 0;
+            let has_right = index < children.len() - 1;
 
-            } else if hasLeft {
-
+            if has_left && (children[index - 1].borrow().keys.len() > (t - 1) as usize) {
+                Self::borrow_from_left(Rc::clone(node),Rc::clone(&children[index]),Rc::clone(&children[index - 1]), index);
+            } else if has_right && (children[index + 1].borrow().keys.len() > (t - 1) as usize) {
+                Self::borrow_from_right(Rc::clone(node), Rc::clone(&children[index]),Rc::clone(&children[index + 1]), index);
+            } else if has_left {
+                Self::merge_from_right(Rc::clone(node), Rc::clone(&children[index - 1]),Rc::clone(&children[index]), index - 1);
             } else {
-
+                Self::merge_from_right(Rc::clone(node), Rc::clone(&children[index]),Rc::clone(&children[index + 1]), index);
             }
         }
     }
-    fn borrowFromLeft(padre: &mut NodeRef<T>, hijo: &mut NodeRef<T>, izq: &mut NodeRef<T>, index: usize){
-        let lenIzq = izq.borrow().keys.len();
-        let mut hijo_ref = & *hijo.borrow_mut();
-        hijo_ref.keys.add(0, izq.borrow_mut().keys.remove(lenIzq - 1);
+    fn borrow_from_left(padre: NodeRef<T>, hijo: NodeRef<T>, izq: NodeRef<T>, index: usize){
+        let hijo_ref = &mut *hijo.borrow_mut();
         match &mut hijo_ref.node_type {
             NodeType::Internal{children} => {
-                hijo_ref.keys.add(0, padre.borrow().keys[index - 1]);
-                padre.borrow_mut().keys[index - 1] = izq.borrow_mut().keys.remove(lenIzq - 1);
-                if let NodeType::Internal{childrenIzq} = &mut izq.borrow_mut().node_type{
-                    children.add(0, childrenIzq.remove(lenIzq));
+                hijo_ref.keys.insert(0, padre.borrow().keys[index - 1]);
+                padre.borrow_mut().keys[index - 1] = izq.borrow_mut().keys.pop().expect("unreachable");
+                if let NodeType::Internal{children: children_izq} = &mut izq.borrow_mut().node_type {
+                    children.insert(0, children_izq.pop().expect("unreachable"));
                 }
-                
             }
             NodeType::Leaf{data, ..} => {
-                hijo_ref.keys.add(0, izq.borrow_mut().keys.remove(lenIzq - 1);
-                if let NodeType::Leaf{dataIzq, ..} = &mut izq.borrow_mut().node_type {
-                    data.add(0, dataIzq.remove(lenIzq - 1));
+                hijo_ref.keys.insert(0, izq.borrow_mut().keys.pop().expect("unreachable"));
+                if let NodeType::Leaf{data: data_izq, ..} = &mut izq.borrow_mut().node_type {
+                    data.insert(0, data_izq.pop().expect("unreachable"));
                 }
                 padre.borrow_mut().keys[index - 1] = hijo_ref.keys[0];
             }
         }
     }
+
+    fn borrow_from_right(padre:NodeRef<T>, hijo:NodeRef<T>, der:NodeRef<T>, index: usize){
+        let hijo_ref = &mut *hijo.borrow_mut();
+        match &mut hijo_ref.node_type {
+            NodeType::Internal{children} => {
+                hijo_ref.keys.push(padre.borrow().keys[index]);
+                if let NodeType::Internal {children: children_der} = &mut der.borrow_mut().node_type {
+                    children.push(children_der.remove(0));
+                }
+                padre.borrow_mut().keys[index] = der.borrow_mut().keys.remove(0);
+            }
+            NodeType::Leaf{data, ..} => {
+                hijo_ref.keys.push(der.borrow_mut().keys.remove(0));
+                if let NodeType::Leaf { data: data_der, .. } = &mut der.borrow_mut().node_type {
+                    data.push(data_der.remove(0));
+                }
+                padre.borrow_mut().keys[index] = der.borrow().keys[0];
+            }
+        }
+    }
+
+    fn merge_from_right(padre: NodeRef<T>, hijo: NodeRef<T>, der: NodeRef<T>, index: usize) {
+        let hijo_ref = &mut *hijo.borrow_mut();
+        match &mut hijo_ref.node_type {
+            NodeType::Internal { children } => {
+                hijo_ref.keys.push(padre.borrow_mut().keys.remove(index));
+                hijo_ref.keys.append(&mut der.borrow_mut().keys);
+                if let NodeType::Internal {children: children_der} = &mut der.borrow_mut().node_type {
+                    children.append(children_der);
+                }
+            }
+            NodeType::Leaf { data, next_leaf } => {
+                hijo_ref.keys.append(&mut der.borrow_mut().keys);
+                if let NodeType::Leaf { data: data_der, next_leaf: next_leaf_der } = &mut der.borrow_mut().node_type {
+                    data.append(data_der);
+                    *next_leaf = next_leaf_der.take();
+                }
+                padre.borrow_mut().keys.remove(index);
+            }
+        }
+        if let NodeType::Internal {children} = &mut padre.borrow_mut().node_type {
+            drop(children.remove(index + 1));
+        }
+        drop(der);
+    }
 }
+
 
 
