@@ -198,26 +198,34 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
     }
     fn borrow_or_merge(node: &NodeRef<T>, index: usize){
         let t = node.borrow().t;
-        let has_right: Option<NodeRef<T>> = None;
-        let has_left: Option<NodeRef<T>> = None;
-        let child: NodeRef<T>;
+        let mut  has_right: Option<NodeRef<T>> = None;
+        let mut  has_left: Option<NodeRef<T>> = None;
+        let mut is_left_empty = false;
+        let mut is_right_empty = false;
+        let mut child: Option<NodeRef<T>> = None;
         if let NodeType::Internal{children} = &node.borrow().node_type {
-            child = Rc::clone(&children[index]);
+            child = Some(Rc::clone(&children[index]));
             if index > 0{
-                has_left = Some(Rc::clone(&children[index - 1]);
+                if children[index - 1].borrow().keys.len() > (t - 1) as usize{
+                    is_left_empty = true;
+                }
+                has_left = Some(Rc::clone(&children[index - 1]));
             }
             if index < children.len() - 1{
+                if children[index + 1].borrow().keys.len() > (t - 1) as usize{
+                    is_right_empty = true;
+                }
                 has_right = Some(Rc::clone(&children[index + 1]));
             }
         }
-        if let Some(left) = has_left && left.borrow().keys.len() > (t - 1) as usize{
-            Self::borrow_from_left(Rc::clone(node), child, left, index);
-        } else if let Some(right) = has_right & right.borrow().keys.len() > (t - 1) as usize{
-            Self::borrow_from_right(Rc::clone(node), child, right, index);
-        } else if let Some(left) {
-            Self::merge_from_right(Rc::clone(node), left, child, index - 1);
-        } else if let Some(right) {
-            Self::merge_from_right(Rc::clone(node), child, right, index);
+        if !has_left.is_none() && is_left_empty {
+            Self::borrow_from_left(Rc::clone(node), child.unwrap(), has_left.unwrap(), index);
+        } else if !has_right.is_none() && is_right_empty {
+            Self::borrow_from_right(Rc::clone(node), child.unwrap(), has_right.unwrap(), index);
+        } else if let Some(left) = has_left{
+            Self::merge_from_right(Rc::clone(node), left, child.unwrap(), index - 1);
+        } else if let Some(right) = has_right{
+            Self::merge_from_right(Rc::clone(node), child.unwrap(), right, index);
         }
     }
     fn borrow_from_left(padre: NodeRef<T>, hijo: NodeRef<T>, izq: NodeRef<T>, index: usize){
@@ -283,6 +291,77 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
             drop(children.remove(index + 1));
         }
         drop(der);
+    }
+
+    pub fn delete(&mut self, key: u64){
+        let root_rc = match &self.root{
+            Some(node) => Rc::clone(node),
+            None => return,
+        };
+
+        Self::delete_in(&root_rc, key);
+
+        let is_root_empty = root_rc.borrow().keys.is_empty();
+        if is_root_empty {
+            match &root_rc.borrow().node_type {
+                NodeType::Internal{children} => {
+                    self.root = Some(Rc::clone(&children[0]));
+                }
+                NodeType::Leaf{..} => {
+                    self.root = None;
+                }
+            }
+        }
+    }
+
+    fn delete_in(node_rc: &NodeRef<T>, key: u64){
+        let mut i = 0;
+
+        let node = node_rc.borrow();
+        match &node.node_type {
+            NodeType::Internal{children} => {
+                while i < node.keys.len() && key >= node.keys[i] { i += 1; }
+                let t = node.t;
+                let is_child_empty = children[i].borrow().keys.len() == (t - 1) as usize;
+                drop(node);
+                if is_child_empty {
+                    let keys_before = node_rc.borrow().keys.len();
+                    Self::borrow_or_merge(node_rc, i);
+
+                    let keys_after = node_rc.borrow().keys.len();
+                    let merged = keys_after < keys_before;
+
+                    if merged {
+                        if i > keys_after {
+                            i -= 1;
+                        }
+                    }
+                    else {
+                        let node_ref = node_rc.borrow();
+                        i = 0;
+                        while i < node_ref.keys.len() && key >= node_ref.keys[i] { i += 1; }
+                    }
+                }
+                let next = {
+                    let node_ref = node_rc.borrow_mut();
+                    if let NodeType::Internal {children} = &node_ref.node_type {
+                        Rc::clone(&children[i])
+                    } else { unreachable!() }
+                };
+                Self::delete_in(&next, key);
+            }
+            NodeType::Leaf{..} => {
+                while i < node.keys.len() && key > node.keys[i] { i += 1 }
+                if i < node.keys.len() && key == node.keys[i] {
+                    drop(node);
+                    let mut node_mut = node_rc.borrow_mut();
+                    node_mut.keys.remove(i);
+                    if let NodeType::Leaf { data, .. } = &mut node_mut.node_type {
+                        data.remove(i);
+                    }
+                }
+            }
+        }
     }
 }
 

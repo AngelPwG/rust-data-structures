@@ -6,35 +6,38 @@ use bptree::NodeType;
 fn main() {
     let mut tree: BPlusTree<String> = BPlusTree::new();
 
-    println!("🌲 Building the B+ Tree...");
+    println!("Building the B+ Tree...");
+
     for i in 1..=100 {
-        let value = format!("Data payload for key {}", i);
-        tree.insert(i, value);
-    }
-    
-    println!("✅ Successfully inserted 100 items, forcing node splits!");
-
-    let target_key = 42;
-    println!("🔍 Searching for key {}...", target_key);
-
-    if let Some((node_rc, index)) = tree.search(target_key) {
-        let locked_node = node_rc.borrow();
-        
-        let value_ref = Ref::map(locked_node, |node| {
-            if let NodeType::Leaf { data, .. } = &node.node_type {
-                &data[index]
-            } else {
-                unreachable!("Wait, search returned an Internal node instead of a Leaf!")
-            }
-        });
-
-        println!("🎯 Found it! Key: {} -> Value: \"{}\"", target_key, *value_ref);
-    } else {
-        println!("❌ Key {} not found.", target_key);
+        tree.insert(i, format!("Data {}", i));
     }
 
-    if tree.search(999).is_none() {
-        println!("👻 Key 999 correctly identified as missing.");
-    }
+    println!("\nTree built successfully! Here is the structure before deletion:");
+    println!("--------------------------------------------------");
     tree.print_recursive();
+    println!("--------------------------------------------------");
+
+    println!("\nDeleting keys 40 through 60...");
+    for i in 40..=60 {
+        tree.delete(i);
+    }
+
+    println!("\nDeletions complete! Here is the newly balanced tree:");
+    println!("--------------------------------------------------");
+    tree.print_recursive();
+    println!("--------------------------------------------------");
+
+    println!("\nRunning integrity checks...");
+
+    if tree.search(45).is_none() {
+        println!("✔️  Success: Key 45 (Deleted) is completely gone.");
+    } else {
+        println!("❌  Error: Key 45 is still in the tree!");
+    }
+
+    if let Some(_) = tree.search(80) {
+        println!("Success: Key 80 (Untouched) is still safely stored.");
+    } else {
+        println!("Error: Key 80 was accidentally destroyed!");
+    }
 }
