@@ -198,19 +198,26 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
     }
     fn borrow_or_merge(node: &NodeRef<T>, index: usize){
         let t = node.borrow().t;
-        if let NodeType::Internal{children} = &mut node.borrow_mut().node_type {
-            let has_left = index > 0;
-            let has_right = index < children.len() - 1;
-
-            if has_left && (children[index - 1].borrow().keys.len() > (t - 1) as usize) {
-                Self::borrow_from_left(Rc::clone(node),Rc::clone(&children[index]),Rc::clone(&children[index - 1]), index);
-            } else if has_right && (children[index + 1].borrow().keys.len() > (t - 1) as usize) {
-                Self::borrow_from_right(Rc::clone(node), Rc::clone(&children[index]),Rc::clone(&children[index + 1]), index);
-            } else if has_left {
-                Self::merge_from_right(Rc::clone(node), Rc::clone(&children[index - 1]),Rc::clone(&children[index]), index - 1);
-            } else {
-                Self::merge_from_right(Rc::clone(node), Rc::clone(&children[index]),Rc::clone(&children[index + 1]), index);
+        let has_right: Option<NodeRef<T>> = None;
+        let has_left: Option<NodeRef<T>> = None;
+        let child: NodeRef<T>;
+        if let NodeType::Internal{children} = &node.borrow().node_type {
+            child = Rc::clone(&children[index]);
+            if index > 0{
+                has_left = Some(Rc::clone(&children[index - 1]);
             }
+            if index < children.len() - 1{
+                has_right = Some(Rc::clone(&children[index + 1]));
+            }
+        }
+        if let Some(left) = has_left && left.borrow().keys.len() > (t - 1) as usize{
+            Self::borrow_from_left(Rc::clone(node), child, left, index);
+        } else if let Some(right) = has_right & right.borrow().keys.len() > (t - 1) as usize{
+            Self::borrow_from_right(Rc::clone(node), child, right, index);
+        } else if let Some(left) {
+            Self::merge_from_right(Rc::clone(node), left, child, index - 1);
+        } else if let Some(right) {
+            Self::merge_from_right(Rc::clone(node), child, right, index);
         }
     }
     fn borrow_from_left(padre: NodeRef<T>, hijo: NodeRef<T>, izq: NodeRef<T>, index: usize){

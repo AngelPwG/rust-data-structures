@@ -36,4 +36,5 @@ fn main() {
     if tree.search(999).is_none() {
         println!("👻 Key 999 correctly identified as missing.");
     }
+    tree.print_recursive();
 }
