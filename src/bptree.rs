@@ -78,15 +78,15 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
     pub fn insert(&mut self, key: u64, value: T) -> bool{
         match &mut self.root{
             None => {
-                self.root = Some(Node::new_node(LEAF_T, true));
-                if let Some(node) = &mut self.root {
-                    let mut node = node.borrow_mut();
+                let new_root = Node::new_node(LEAF_T, true);
+                {
+                    let mut node = new_root.borrow_mut();
                     node.keys.push(key);
                     if let NodeType::Leaf{data, ..} = &mut node.node_type {
-                        data.push(value)
+                        data.push(value);
                     }
-                    return true;
                 }
+                self.root = Some(new_root);
                 true
             },
             Some(root) => {
@@ -186,8 +186,9 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
     }
     fn print_recursively(node: &NodeRef<T>, level: usize){
         print!("{} Level {level}", " ".repeat(level * 4));
-        println!("{:?}", node.borrow().keys);
-        match &node.borrow().node_type {
+        let node_ref = node.borrow();
+        println!("{:?}", node_ref.keys);
+        match &node_ref.node_type {
             NodeType::Internal{children} => {
                 for child in children {
                     Self::print_recursively(&Rc::clone(child), level + 1);
@@ -196,7 +197,7 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
             _ => {}
         }
     }
-    fn borrow_or_merge(node: &NodeRef<T>, index: usize){
+    fn borrow_or_merge(node: NodeRef<T>, index: usize) -> bool{
         let t = node.borrow().t;
         let mut  has_right: Option<NodeRef<T>> = None;
         let mut  has_left: Option<NodeRef<T>> = None;
@@ -219,14 +220,19 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
             }
         }
         if !has_left.is_none() && is_left_empty {
-            Self::borrow_from_left(Rc::clone(node), child.unwrap(), has_left.unwrap(), index);
+            Self::borrow_from_left(Rc::clone(&node), child.unwrap(), has_left.unwrap(), index);
+            return false
         } else if !has_right.is_none() && is_right_empty {
-            Self::borrow_from_right(Rc::clone(node), child.unwrap(), has_right.unwrap(), index);
+            Self::borrow_from_right(Rc::clone(&node), child.unwrap(), has_right.unwrap(), index);
+            return false
         } else if let Some(left) = has_left{
-            Self::merge_from_right(Rc::clone(node), left, child.unwrap(), index - 1);
+            Self::merge_from_right(Rc::clone(&node), left, child.unwrap(), index - 1);
+            return true
         } else if let Some(right) = has_right{
-            Self::merge_from_right(Rc::clone(node), child.unwrap(), right, index);
+            Self::merge_from_right(Rc::clone(&node), child.unwrap(), right, index);
+            return false
         }
+        false
     }
     fn borrow_from_left(padre: NodeRef<T>, hijo: NodeRef<T>, izq: NodeRef<T>, index: usize){
         let hijo_ref = &mut *hijo.borrow_mut();
@@ -257,8 +263,7 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
                     children.push(children_der.remove(0));
                 }
                 padre.borrow_mut().keys[index] = der.borrow_mut().keys.remove(0);
-            }
-            NodeType::Leaf{data, ..} => {
+            } NodeType::Leaf{data, ..} => {
                 hijo_ref.keys.push(der.borrow_mut().keys.remove(0));
                 if let NodeType::Leaf { data: data_der, .. } = &mut der.borrow_mut().node_type {
                     data.push(data_der.remove(0));
@@ -295,15 +300,15 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
 
     pub fn delete(&mut self, key: u64){
         let root_rc = match &self.root{
-            Some(node) => Rc::clone(node),
+            Some(node) => Rc::clone(&node),
             None => return,
         };
+        let node_ref = Rc::clone(&root_rc);
+        Self::delete_in(root_rc, key);
 
-        Self::delete_in(&root_rc, key);
-
-        let is_root_empty = root_rc.borrow().keys.is_empty();
+        let is_root_empty = node_ref.borrow().keys.is_empty();
         if is_root_empty {
-            match &root_rc.borrow().node_type {
+            match &node_ref.borrow().node_type {
                 NodeType::Internal{children} => {
                     self.root = Some(Rc::clone(&children[0]));
                 }
@@ -314,27 +319,21 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
         }
     }
 
-    fn delete_in(node_rc: &NodeRef<T>, key: u64){
+    fn delete_in(node_rc: NodeRef<T>, key: u64){
         let mut i = 0;
 
         let node = node_rc.borrow();
         match &node.node_type {
             NodeType::Internal{children} => {
                 while i < node.keys.len() && key >= node.keys[i] { i += 1; }
-                let t = node.t;
+                let t = children[i].borrow().t;
                 let is_child_empty = children[i].borrow().keys.len() == (t - 1) as usize;
                 drop(node);
                 if is_child_empty {
-                    let keys_before = node_rc.borrow().keys.len();
-                    Self::borrow_or_merge(node_rc, i);
+                    let consumed = Self::borrow_or_merge(Rc::clone(&node_rc), i);
 
-                    let keys_after = node_rc.borrow().keys.len();
-                    let merged = keys_after < keys_before;
-
-                    if merged {
-                        if i > keys_after {
-                            i -= 1;
-                        }
+                    if consumed {
+                        i -= 1;
                     }
                     else {
                         let node_ref = node_rc.borrow();
@@ -348,7 +347,7 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
                         Rc::clone(&children[i])
                     } else { unreachable!() }
                 };
-                Self::delete_in(&next, key);
+                Self::delete_in(next, key);
             }
             NodeType::Leaf{..} => {
                 while i < node.keys.len() && key > node.keys[i] { i += 1 }
@@ -359,6 +358,37 @@ impl<T: Display + PartialOrd> BPlusTree<T>{
                     if let NodeType::Leaf { data, .. } = &mut node_mut.node_type {
                         data.remove(i);
                     }
+                }
+            }
+        }
+    }
+    pub fn update(&self, key: u64, record: T){
+        let root_rc = {
+            match &self.root{
+                Some(node) => node,
+                None => return,
+            }
+        };
+        Self::update_in(Rc::clone(&root_rc), key, record);
+    }
+
+    fn update_in(node: NodeRef<T>, key: u64, record: T){
+        let node_rc = node.borrow();
+        let mut i = 0;
+        match &node_rc.node_type {
+            NodeType::Internal { children } => {
+                while i < node_rc.keys.len() && key >= node_rc.keys[i] { i += 1 }
+                let child = Rc::clone(&children[i]);           
+                drop(node_rc);
+                Self::update_in(child, key, record);
+            }
+            NodeType::Leaf { .. } => {
+                while i < node_rc.keys.len() && key > node_rc.keys[i] { i += 1 }
+                if i > node_rc.keys.len() - 1 { return }
+                drop(node_rc);
+                let mut node_mut  =  &mut *node.borrow_mut();
+                if let NodeType::Leaf {data, ..} = &mut node_mut.node_type && node_mut.keys[i] == key {
+                    data[i] = record;
                 }
             }
         }
